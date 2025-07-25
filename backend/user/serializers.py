@@ -16,34 +16,87 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = UserSerializer()
         fields = ['gender','profile_pix','fullname','phone']
 
+from rest_framework import serializers
+from django.contrib.auth.models import User
+from .models import Profile
+
 class RegistrationSerializer(serializers.ModelSerializer):
-    password1 = serializers.CharField(write_only=True)
-    password2 = serializers.CharField(write_only=True)
-    username = serializers.CharField(write_only=True)
-    email = serializers.EmailField(write_only=True)
+    fullname = serializers.CharField(write_only=True, required=True)
+    phone = serializers.CharField(write_only=True, required=True)
+    gender = serializers.ChoiceField(
+        choices=[('M', 'Male'), ('F', 'Female')],
+        write_only=True,
+        required=True
+    )
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={'input_type': 'password'},
+        min_length=8
+    )
+    email = serializers.EmailField(required=True)
+
     class Meta:
-        model = Profile
-        fields = ['fullname','username','email','password1','password2','gender','phone','profile_pix']
-    def validate(self,data):
-        if data['password1'] != data['password2']:
-            raise serializers.ValidationError('password does not match')
-        return data
+        model = User
+        fields = ['username', 'email', 'password', 'fullname', 'phone', 'gender']
+        extra_kwargs = {
+            'username': {'required': True},
+            'email': {'required': True}
+        }
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists")
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already in use")
+        return value.lower()  # Normalize email
+
     def create(self, validated_data):
-        username = validated_data.pop('username')#(a)removing default username set by django 
-        email = validated_data.pop('email')
-        password = validated_data.pop('password1')
-
-        user = User.objects.create_user(username=username,email=email,password=password)#(b)to the one that is typed
-
-        profile = Profile.objects.create(
-            user = user,
-            fullname = validated_data['fullname'],
-            phone = validated_data['phone'],
-            gender = validated_data['gender'],
-            profile_pix = validated_data.get('profile_pix')
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password']
         )
-        SendMail(email)
-        return profile
+        
+        Profile.objects.create(
+            user=user,
+            fullname=validated_data['fullname'],
+            phone=validated_data['phone'],
+            gender=validated_data['gender']
+        )
+        return user
+
+# class RegistrationSerializer(serializers.ModelSerializer):
+#     password1 = serializers.CharField(write_only=True)
+#     password2 = serializers.CharField(write_only=True)
+#     username = serializers.CharField(write_only=True)
+#     email = serializers.EmailField(write_only=True)
+#     class Meta:
+#         model = Profile
+#         fields = ['fullname','username','email','password1','password2','gender','phone','profile_pix']
+#     def validate(self,data):
+#         if data['password1'] != data['password2']:
+#             raise serializers.ValidationError('password does not match')
+#         return data
+#     def create(self, validated_data):
+#         username = validated_data.pop('username')#(a)removing default username set by django 
+#         email = validated_data.pop('email')
+#         password = validated_data.pop('password1')
+
+#         user = User.objects.create_user(username=username,email=email,password=password)#(b)to the one that is typed
+
+#         profile = Profile.objects.create(
+#             user = user,
+#             fullname = validated_data['fullname'],
+#             phone = validated_data['phone'],
+#             gender = validated_data['gender'],
+#             profile_pix = validated_data.get('profile_pix')
+#         )
+#         SendMail(email)
+#         return profile
     
 class UpdateProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username',required=False)

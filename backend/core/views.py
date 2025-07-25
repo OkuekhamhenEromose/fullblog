@@ -24,7 +24,7 @@ class CategoryView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         try:
             serializer = CategorySerializer(data=request.data)
@@ -44,7 +44,7 @@ class CategoryEditView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAuthenticated]
     def put(self, request, pk):
         try:
             category = get_object_or_404(Category, pk=pk)
@@ -56,7 +56,7 @@ class CategoryEditView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAuthenticated]
     def delete(self, request, pk):
         try:
             category = get_object_or_404(Category, pk=pk)

@@ -5,7 +5,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from api import models as api_models
+from core import models as api_models
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
