@@ -1,46 +1,21 @@
 from rest_framework import serializers
-from .models import *
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import serializers
-from rest_framework.validators import UniqueValidator
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-
-from core import models as api_models
+from .models import Post, Category, Comment, Bookmark, Notification
+from user.models import Profile
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
-        model=Category
-        fields='__all__'
-
-
-# Define a custom serializer that inherits from TokenObtainPairSerializer
-class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
-
-    @classmethod
-    # Define a custom method to get the token for a user
-    def get_token(cls, user):
-        # Call the parent class's get_token method
-        token = super().get_token(user)
-
-        # Add custom claims to the token
-        token['full_name'] = user.full_name
-        token['email'] = user.email
-        token['username'] = user.username
-        try:
-            token['vendor_id'] = user.vendor.id
-        except:
-            token['vendor_id'] = 0
-
-        # ...
-
-        # Return the token with custom claims
-        return token
+        model = Category
+        fields = '__all__'
 
 class CommentSerializer(serializers.ModelSerializer):
-    
     class Meta:
-        model = api_models.Comment
-        fields = "__all__"
+        model = Comment
+        fields = '__all__'
+        extra_kwargs = {
+            'post': {'required': False},
+            'name': {'required': False},
+            'email': {'required': False}
+        }
 
     def __init__(self, *args, **kwargs):
         super(CommentSerializer, self).__init__(*args, **kwargs)
@@ -48,52 +23,46 @@ class CommentSerializer(serializers.ModelSerializer):
         if request and request.method == 'POST':
             self.Meta.depth = 0
         else:
-            self.Meta.depth = 1
-
+            self.Meta.depth = 2
 
 class PostSerializer(serializers.ModelSerializer):
-    comments = CommentSerializer(many=True)
-    
-    class Meta:
-        model = api_models.Post
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super(PostSerializer, self).__init__(*args, **kwargs)
-        request = self.context.get('request')
-        if request and request.method == 'POST':
-            self.Meta.depth = 0
-        else:
-            self.Meta.depth = 3
-
-
-
-class BookmarkSerializer(serializers.ModelSerializer):
-    
-    class Meta:
-        model = api_models.Bookmark
-        fields = "__all__"
-
-
-    def __init__(self, *args, **kwargs):
-        super(BookmarkSerializer, self).__init__(*args, **kwargs)
-        request = self.context.get('request')
-        if request and request.method == 'POST':
-            self.Meta.depth = 0
-        else:
-            self.Meta.depth = 3
-    
-class NotificationSerializer(serializers.ModelSerializer):  
+    comments = CommentSerializer(many=True, read_only=True)
+    is_owner = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source='category.title', read_only=True)
+    likes_count = serializers.SerializerMethodField()
 
     class Meta:
-        model = api_models.Notification
-        fields = "__all__"
+        model = Post
+        fields = [
+            'id', 'title', 'image', 'description', 'tags', 'category', 
+            'category_name', 'status', 'view', 'likes', 'likes_count',
+            'slug', 'date', 'user', 'profile', 'comments', 'is_owner'
+        ]
+        extra_kwargs = {
+            'user': {'read_only': True},
+            'profile': {'read_only': True},
+            'slug': {'read_only': True},
+            'view': {'read_only': True}
+        }
 
-    def __init__(self, *args, **kwargs):
-        super(NotificationSerializer, self).__init__(*args, **kwargs)
+    def get_is_owner(self, obj):
         request = self.context.get('request')
-        if request and request.method == 'POST':
-            self.Meta.depth = 0
-        else:
-            self.Meta.depth = 3
+        if request and hasattr(request, 'user'):
+            return obj.user.user == request.user
+        return False
 
+    def get_likes_count(self, obj):
+        return obj.likes.count()
+
+    def validate_category(self, value):
+        if isinstance(value, int):
+            try:
+                return Category.objects.get(pk=value)
+            except Category.DoesNotExist:
+                raise serializers.ValidationError("Category does not exist")
+        return value
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user.profile
+        validated_data['profile'] = self.context['request'].user.profile
+        return super().create(validated_data)

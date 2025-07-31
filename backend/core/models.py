@@ -1,13 +1,14 @@
 import uuid
 from django.db import models
 from user.models import Profile
+from django.contrib.auth import get_user_model
 import secrets
 from django.utils.text import slugify
 
 from shortuuid.django_fields import ShortUUIDField
 import shortuuid
 
-
+User = get_user_model()
 
 CATEGORY_CHOICES =(
     ('news', 'News'),
@@ -33,7 +34,7 @@ class Post(models.Model):
         ("Disabled", "Disabled"),
     )
 
-    user = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="posts_as_user")
+    user = models.ForeignKey('user.Profile', on_delete=models.CASCADE, related_name="posts_as_user")
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, null=True, blank=True, related_name="posts_as_profile")
     title = models.CharField(max_length=100)
     image = models.FileField(upload_to="image", null=True, blank=True)
@@ -77,7 +78,7 @@ class Comment(models.Model):
 
 
 class Bookmark(models.Model):
-    user = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    user = models.ForeignKey('user.Profile', on_delete=models.CASCADE)
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
     date = models.DateTimeField(auto_now_add=True)
 
@@ -90,7 +91,7 @@ class Bookmark(models.Model):
 
 class Notification(models.Model):
     NOTI_TYPE = ( ("Like", "Like"), ("Comment", "Comment"), ("Bookmark", "Bookmark"))
-    user = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    user = models.ForeignKey('user.Profile', on_delete=models.CASCADE)
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
     type = models.CharField(max_length=100, choices=NOTI_TYPE)
     seen = models.BooleanField(default=False)

@@ -1,3 +1,4 @@
+
 # after installing djangorestframework and adding it in installed app of settings
 from rest_framework import serializers
 from . models import Profile
@@ -16,33 +17,63 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = UserSerializer()
         fields = ['gender','profile_pix','fullname','phone']
 
-from rest_framework import serializers
-from django.contrib.auth.models import User
-from .models import Profile
-
 class RegistrationSerializer(serializers.ModelSerializer):
-    fullname = serializers.CharField(write_only=True, required=True)
-    phone = serializers.CharField(write_only=True, required=True)
+    fullname = serializers.CharField(
+        write_only=True,
+        required=True,
+        error_messages={
+            'required': 'Full name is required',
+            'blank': 'Full name cannot be blank'
+        }
+    )
+    phone = serializers.CharField(
+        write_only=True,
+        required=True,
+        error_messages={
+            'required': 'Phone number is required',
+            'blank': 'Phone number cannot be blank'
+        }
+    )
     gender = serializers.ChoiceField(
         choices=[('M', 'Male'), ('F', 'Female')],
         write_only=True,
-        required=True
+        required=True,
+        error_messages={
+            'required': 'Gender is required',
+            'invalid_choice': 'Gender must be either M or F'
+        }
     )
     password = serializers.CharField(
         write_only=True,
         required=True,
         style={'input_type': 'password'},
-        min_length=8
+        min_length=8,
+        error_messages={
+            'required': 'Password is required',
+            'min_length': 'Password must be at least 8 characters'
+        }
     )
-    email = serializers.EmailField(required=True)
+    email = serializers.EmailField(
+        required=True,
+        error_messages={
+            'required': 'Email is required',
+            'invalid': 'Enter a valid email address'
+        }
+    )
 
     class Meta:
         model = User
         fields = ['username', 'email', 'password', 'fullname', 'phone', 'gender']
         extra_kwargs = {
-            'username': {'required': True},
-            'email': {'required': True}
+            'username': {
+                'required': True,
+                'error_messages': {
+                    'required': 'Username is required'
+                }
+            }
         }
+
+    # ... rest of the serializer remains the same ...
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
@@ -68,56 +99,49 @@ class RegistrationSerializer(serializers.ModelSerializer):
             gender=validated_data['gender']
         )
         return user
-
-# class RegistrationSerializer(serializers.ModelSerializer):
-#     password1 = serializers.CharField(write_only=True)
-#     password2 = serializers.CharField(write_only=True)
-#     username = serializers.CharField(write_only=True)
-#     email = serializers.EmailField(write_only=True)
-#     class Meta:
-#         model = Profile
-#         fields = ['fullname','username','email','password1','password2','gender','phone','profile_pix']
-#     def validate(self,data):
-#         if data['password1'] != data['password2']:
-#             raise serializers.ValidationError('password does not match')
-#         return data
-#     def create(self, validated_data):
-#         username = validated_data.pop('username')#(a)removing default username set by django 
-#         email = validated_data.pop('email')
-#         password = validated_data.pop('password1')
-
-#         user = User.objects.create_user(username=username,email=email,password=password)#(b)to the one that is typed
-
-#         profile = Profile.objects.create(
-#             user = user,
-#             fullname = validated_data['fullname'],
-#             phone = validated_data['phone'],
-#             gender = validated_data['gender'],
-#             profile_pix = validated_data.get('profile_pix')
-#         )
-#         SendMail(email)
-#         return profile
     
 class UpdateProfileSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username',required=False)
-    email = serializers.EmailField(source='user.email',required=False)
+    username = serializers.CharField(source='user.username', required=False)
+    email = serializers.EmailField(source='user.email', required=False)
+
     class Meta:
         model = Profile
-        fields=['fullname','username','email','gender','phone','profile_pix']
-    def update(self,instance,validated_data):
-        user_data=validated_data.pop('user,{}')
-        user=instance.user
-        if 'username' in user_data:# username is not empty
-            user.username=user_data['username']
-        if 'email' in user_data:
-            user.email=user_data['email']
-        user.save()
+        fields = ['fullname', 'username', 'email', 'gender', 'phone', 'profile_pix']
+        extra_kwargs = {
+            'fullname': {'required': False},
+            'gender': {'required': False},
+            'phone': {'required': False},
+            'profile_pix': {'required': False}
+        }
 
-        instance.fullname = validated_data.get('fullname')
-        instance.gender = validated_data.get('gender')
-        instance.phone = validated_data.get('phone')
-        instance.profile_pix = validated_data.get('profile_pix')
+    def validate(self, data):
+        user_data = data.get('user', {})
+        
+        # Check username uniqueness if being updated
+        if 'username' in user_data:
+            if User.objects.exclude(pk=self.instance.user.pk).filter(username=user_data['username']).exists():
+                raise serializers.ValidationError({'username': 'This username is already taken'})
+        
+        # Check email uniqueness if being updated
+        if 'email' in user_data:
+            if User.objects.exclude(pk=self.instance.user.pk).filter(email=user_data['email']).exists():
+                raise serializers.ValidationError({'email': 'This email is already in use'})
+        
+        return data
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+
+        # Update user fields
+        user = instance.user
+        if user_data:
+            for attr, value in user_data.items():
+                setattr(user, attr, value)
+            user.save()
+
+        # Update profile fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         instance.save()
 
         return instance
-    

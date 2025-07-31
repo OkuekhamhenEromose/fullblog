@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import permission_classes
+from rest_framework.decorators import permission_classes, authentication_classes
 from . serializers import UserSerializer,RegistrationSerializer,UpdateProfileSerializer
 from . models import Profile
 from django.contrib.auth.models import User
@@ -17,6 +17,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
+@permission_classes([])
+@authentication_classes([])
 class RegistrationView(APIView):
     permission_classes = [AllowAny]
     def post(self, request):
@@ -61,8 +63,8 @@ class RegistrationView(APIView):
 
 
 # Login
+@permission_classes([AllowAny])
 class LoginView(APIView):
-    permission_classes = [AllowAny]
     def post(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
@@ -72,15 +74,14 @@ class LoginView(APIView):
         if user:
             token, created = Token.objects.get_or_create(user=user)
             return Response({
+                'success': True,
                 'token': token.key,
-                'user': {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email
-                }
-            })
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email
+            }, status=status.HTTP_200_OK)
         return Response(
-            {'error': 'Invalid credentials'}, 
+            { 'success': False, 'error': 'Invalid credentials'}, 
             status=status.HTTP_401_UNAUTHORIZED
         )
 # Logout
@@ -105,20 +106,40 @@ class DashboardView(APIView):
 # update
 class UpdateProfileView(APIView):
     permission_classes = [IsAuthenticated]
-    def get(self,request):
+    
+    def get(self, request):
         try:
             profile = request.user.profile
             serializer = UpdateProfileSerializer(profile)
-            return Response(serializer.data,status=status.HTTP_200_OK)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({'error':str(e)}, status = status.HTTP_500_INTERNAL_SERVER_ERROR)
-    def put(self,request):
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def put(self, request):
         try:
             profile = request.user.profile
-            serializer = UpdateProfileSerializer(profile,data=request.data)
+            
+            # Transform flat request data to nested structure if needed
+            data = request.data.copy()
+            if 'username' in data or 'email' in data:
+                if 'user' not in data:
+                    data['user'] = {}
+                if 'username' in data:
+                    data['user']['username'] = data.pop('username')
+                if 'email' in data:
+                    data['user']['email'] = data.pop('email')
+            
+            serializer = UpdateProfileSerializer(profile, data=data, partial=True)
+            
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data,status=status.HTTP_200_OK)
-            return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            # Return detailed error messages
+            return Response({
+                'errors': serializer.errors,
+                'message': 'Update failed. Please check the errors.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
         except Exception as e:
-            return Response({'error':str(e)}, status = status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
